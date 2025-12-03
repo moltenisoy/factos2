@@ -30,8 +30,17 @@ class CodeAnalyzer:
                 self.content = f.read()
                 self.lines = self.content.split('\n')
             return True
+        except FileNotFoundError:
+            logger.error(f"File not found: {self.file_path}")
+            return False
+        except PermissionError:
+            logger.error(f"Permission denied: {self.file_path}")
+            return False
+        except UnicodeDecodeError as e:
+            logger.error(f"Failed to decode {self.file_path}: {e}")
+            return False
         except Exception as e:
-            logger.error(f"Failed to load {self.file_path}: {e}")
+            logger.error(f"Unexpected error loading {self.file_path}: {e}")
             return False
     
     def parse_ast(self) -> bool:
@@ -417,8 +426,19 @@ class CodeAnalyzer:
             return
         
         for node in ast.walk(self.tree):
-            if isinstance(node, ast.Num):
+            # Handle both old ast.Num (Python < 3.8) and new ast.Constant (Python >= 3.8)
+            if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
                 # Ignore common values like 0, 1, -1, 2
+                if node.value not in [0, 1, -1, 2, 10, 100]:
+                    self.issues.append({
+                        'method': 'Magic Numbers',
+                        'severity': 'INFO',
+                        'line': node.lineno,
+                        'message': f'Magic number found: {node.value} (consider using named constant)',
+                        'code': self.lines[node.lineno - 1].strip()
+                    })
+            elif hasattr(ast, 'Num') and isinstance(node, ast.Num):
+                # Fallback for older Python versions
                 if node.n not in [0, 1, -1, 2, 10, 100]:
                     self.issues.append({
                         'method': 'Magic Numbers',
@@ -542,7 +562,21 @@ class CodeAnalyzer:
 def analyze_directory(directory: str):
     """Analyze all Python files in a directory"""
     path = Path(directory)
-    py_files = list(path.glob('*.py'))
+    
+    # Check if directory exists
+    if not path.exists():
+        logger.error(f"Directory not found: {directory}")
+        return
+    
+    if not path.is_dir():
+        logger.error(f"Not a directory: {directory}")
+        return
+    
+    try:
+        py_files = list(path.glob('*.py'))
+    except PermissionError:
+        logger.error(f"Permission denied accessing directory: {directory}")
+        return
     
     if not py_files:
         logger.error(f"No Python files found in {directory}")
@@ -574,12 +608,21 @@ def analyze_directory(directory: str):
 if __name__ == '__main__':
     if len(sys.argv) > 1:
         target = sys.argv[1]
-        if Path(target).is_dir():
+        target_path = Path(target)
+        
+        if not target_path.exists():
+            logger.error(f"Error: Target does not exist: {target}")
+            sys.exit(1)
+        
+        if target_path.is_dir():
             analyze_directory(target)
-        else:
+        elif target_path.is_file():
             analyzer = CodeAnalyzer(target)
             if analyzer.analyze():
                 analyzer.print_report()
+        else:
+            logger.error(f"Error: Invalid target: {target}")
+            sys.exit(1)
     else:
         # Default: analyze current directory
         analyze_directory('.')

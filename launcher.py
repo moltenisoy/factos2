@@ -1,7 +1,9 @@
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk
+from tkinter import messagebox
 import threading
 import sys
+
 from core import UnifiedProcessManager, enable_debug_privilege
 
 class AppLauncher(tk.Tk):
