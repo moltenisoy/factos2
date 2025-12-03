@@ -308,3 +308,8 @@ class DynamicMultiLayerProfileSystem:
             return settings
     
     def get_scenario_metrics(self):
+        with self.lock:
+            return {
+                'scenario_switches': self.stats.get('scenario_switches', 0),
+                'auto_adjustments': self.stats.get('auto_adjustments', 0)
+            }

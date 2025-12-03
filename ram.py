@@ -823,3 +823,5 @@ class AdvancedMemoryPagePriorityManager:
             return False
     
     def get_stats(self):
+        with self.lock:
+            return self.stats.copy()
